@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+button {
+  cursor: pointer;
+}
+
+.border {
+  border-color: #e5e7eb;
+}
