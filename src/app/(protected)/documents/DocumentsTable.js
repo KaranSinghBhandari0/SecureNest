@@ -7,24 +7,26 @@ import { FaTrash } from "react-icons/fa";
 import { Edit, Eye, X } from "lucide-react";
 import React, { useState, useRef } from "react";
 import useOutsideClick from "@/hooks/useOutsideClick";
+import AlertBox from "@/components/common/AlertBox";
+import Image from "next/image";
 
 export default function DocumentsTable({ documents }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+
   const popupRef = useRef(null);
 
   const { request, loading } = useApi();
 
   useOutsideClick(popupRef, () => setSelectedDoc(null), !!selectedDoc);
 
-  const handleDelete = async (id) => {
-    if (confirm("Are you sure you want to delete this document?")) {
-      await request({
-        url: `/api/document/${id}`,
-        method: "DELETE",
-        refresh: true,
-        success: true,
-      });
-    }
+  const deleteDocument = async (id) => {
+    await request({
+      url: `/api/document/${id}`,
+      method: "DELETE",
+      refresh: true,
+      showSuccess: true,
+    });
   };
 
   const handleEdit = (id) => alert(`Navigating to edit document ${id}`);
@@ -51,15 +53,28 @@ export default function DocumentsTable({ documents }) {
           </div>
         );
 
-      case "Image":
+      case "image":
         return (
           <div className="flex justify-center p-2 bg-gray-100 rounded-lg">
-            <img
-              src={doc.imageUrl}
+            <Image
+              src={doc.image}
               className="max-h-80 object-contain rounded-lg shadow-md border border-gray-200"
               alt="Document Content"
+              height={256}
+              width={256}
             />
           </div>
+        );
+
+      case "pdf":
+        return (
+          <iframe
+            src={doc.pdf}
+            width="100%"
+            height="600px"
+            className="border rounded"
+            title="PDF Document"
+          />
         );
 
       case "text":
@@ -74,8 +89,26 @@ export default function DocumentsTable({ documents }) {
     }
   };
 
+  const [showAlertBox, setShowAlertBox] = useState(false);
+
   return (
     <div className="w-full min-h-[calc(100vh-56px)] bg-gray-50 p-4">
+
+      <AlertBox
+        visible={showAlertBox}
+        title="Delete Document"
+        text="Are you sure you want to delete this document? This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Revert"
+        confirmColor="red"
+        loading={loading}
+        onConfirm={async () => {
+          await deleteDocument(deleteId);
+          setShowAlertBox(false);
+        }}
+        onCancel={() => setShowAlertBox(false)}
+      />
+
       <div className="max-w-5xl mx-auto">
 
         <HeaderSection documents={documents} />
@@ -84,7 +117,10 @@ export default function DocumentsTable({ documents }) {
           documents={documents}
           loading={loading}
           setSelectedDoc={setSelectedDoc}
-          handleDelete={handleDelete}
+          handleDelete={(id) => {
+            setDeleteId(id);
+            setShowAlertBox(true);
+          }}
           handleEdit={handleEdit}
         />
 
@@ -106,7 +142,7 @@ export default function DocumentsTable({ documents }) {
 function HeaderSection({ documents }) {
   return (
     <div className="flex justify-between items-center mb-6">
-      <h1 className="text-2xl font-semibold text-gray-900">
+      <h1 className="text-2xl font-bold text-gray-900">
         My Documents
         <span className="ml-2 text-gray-500 text-sm">
           ({documents.length})

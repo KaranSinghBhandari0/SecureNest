@@ -2,30 +2,31 @@
 
 import { useState } from "react";
 import { useApi } from "@/hooks/useApi";
-import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
-import FileInput from "@/components/common/FileInput";
 import PasswordInput from "@/components/common/PasswordInput";
+import Button from "@/components/common/Button";
+import { CloudUpload, X, FileText } from "lucide-react";
+import Image from "next/image";
 
 export default function CreateDocument() {
-
   const { request, loading } = useApi();
 
   const [type, setType] = useState("");
 
-  const [formData, setFormData] = useState({
+  const [doc, setDoc] = useState({
     title: "",
     email: "",
     username: "",
     password: "",
     image: null,
-    text: "",
     pdf: null,
+    text: "",
   });
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    setFormData((prev) => ({
+
+    setDoc((prev) => ({
       ...prev,
       [name]: files ? files[0] : value,
     }));
@@ -33,14 +34,53 @@ export default function CreateDocument() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const fd = new FormData();
+    fd.append("title", doc.title);
+    fd.append("type", type);
+
+    if (type === "email-password") {
+      fd.append("email", doc.email);
+      fd.append("password", doc.password);
+    }
+
+    if (type === "username-password") {
+      fd.append("username", doc.username);
+      fd.append("password", doc.password);
+    }
+
+    if (type === "image" && doc.image) {
+      fd.append("file", doc.image);
+    }
+
+    if (type === "pdf" && doc.pdf) {
+      fd.append("file", doc.pdf);
+    }
+
+    if (type === "text") {
+      fd.append("text", doc.text);
+    }
+
     await request({
       url: "/api/document",
       method: "POST",
-      body: { ...formData, type },
+      body: fd,
+      formData: true,
       showSuccess: true,
-      redirect: "/documents",
       refresh: true,
+      redirect: "/documents",
     });
+
+    setDoc({
+      title: "",
+      email: "",
+      username: "",
+      password: "",
+      image: null,
+      pdf: null,
+      text: "",
+    });
+    setType("");
   };
 
   return (
@@ -59,7 +99,7 @@ export default function CreateDocument() {
             label="Document Title"
             type="text"
             name="title"
-            value={formData.title}
+            value={doc.title}
             onChange={handleChange}
             placeholder="Enter document title"
             required
@@ -83,7 +123,7 @@ export default function CreateDocument() {
               <option value="username-password">Username & Password</option>
               <option value="image">Image</option>
               <option value="text">Text File</option>
-              <option value="pdf">PDF</option>
+              <option value="pdf">Pdf</option>
             </select>
           </div>
 
@@ -94,13 +134,13 @@ export default function CreateDocument() {
                 label="Email"
                 name="email"
                 type="email"
-                value={formData.email}
+                value={doc.email}
                 onChange={handleChange}
                 placeholder="Enter email"
                 required
               />
               <PasswordInput
-                value={formData.password}
+                value={doc.password}
                 onChange={handleChange}
                 required
               />
@@ -113,29 +153,23 @@ export default function CreateDocument() {
                 label="Username"
                 name="username"
                 type="text"
-                value={formData.username}
+                value={doc.username}
                 onChange={handleChange}
                 placeholder="Enter username"
                 required
               />
               <PasswordInput
-                value={formData.password}
+                value={doc.password}
                 onChange={handleChange}
                 required
               />
             </>
           )}
 
-          {type === "image" && (
-            <FileInput
-              label="Upload Image"
-              name="image"
-              accept="image/*"
-              required
-              onChange={handleChange}
-            />
-          )}
+          {/* IMAGE UPLOAD */}
+          {type === "image" && <ImageUploadSection doc={doc} setDoc={setDoc} />}
 
+          {/* TEXT INPUT */}
           {type === "text" && (
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -143,7 +177,7 @@ export default function CreateDocument() {
               </label>
               <textarea
                 name="text"
-                value={formData.text}
+                value={doc.text}
                 onChange={handleChange}
                 rows={4}
                 placeholder="Write your text here..."
@@ -154,15 +188,8 @@ export default function CreateDocument() {
             </div>
           )}
 
-          {type === "pdf" && (
-            <FileInput
-              label="Upload PDF"
-              name="pdf"
-              accept="application/pdf"
-              required
-              onChange={handleChange}
-            />
-          )}
+          {/* PDF UPLOAD */}
+          {type === "pdf" && <PdfUploadSection doc={doc} setDoc={setDoc} />}
         </div>
 
         {/* Submit Button */}
@@ -178,3 +205,99 @@ export default function CreateDocument() {
     </div>
   );
 }
+
+/* ---------------- IMAGE UPLOAD (Same UI as Job Creation) ---------------- */
+const ImageUploadSection = ({ doc, setDoc }) => {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Upload Image <span className="text-red-500">*</span>
+      </label>
+
+      {!doc.image ? (
+        <label
+          htmlFor="img-upload"
+          className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition"
+        >
+          <CloudUpload className="h-10 w-10 text-gray-400 mb-2" />
+          <p className="text-sm text-gray-600">
+            <span className="font-medium text-blue-600">Click to upload</span>{" "}
+            or drag and drop
+          </p>
+          <input
+            id="img-upload"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) =>
+              setDoc((prev) => ({ ...prev, image: e.target.files[0] }))
+            }
+          />
+        </label>
+      ) : (
+        <div className="relative w-40 h-40 mx-auto">
+          <Image
+            src={URL.createObjectURL(doc.image)}
+            width={125}
+            height={125}
+            alt="Preview"
+            className="object-contain border rounded"
+          />
+          <button
+            type="button"
+            onClick={() => setDoc((prev) => ({ ...prev, image: null }))}
+            className="absolute top-1 right-1 bg-white border p-1 rounded-full shadow"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ---------------- PDF UPLOAD ---------------- */
+const PdfUploadSection = ({ doc, setDoc }) => {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Upload PDF <span className="text-red-500">*</span>
+      </label>
+
+      {!doc.pdf ? (
+        <label
+          htmlFor="pdf-upload"
+          className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition"
+        >
+          <FileText className="h-10 w-10 text-gray-400 mb-2" />
+          <p className="text-sm text-gray-600">
+            <span className="font-medium text-blue-600">Click to upload</span>{" "}
+            or drag and drop PDF
+          </p>
+          <input
+            id="pdf-upload"
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) =>
+              setDoc((prev) => ({ ...prev, pdf: e.target.files[0] }))
+            }
+          />
+        </label>
+      ) : (
+        <div className="flex items-center gap-3 p-3 border rounded">
+          <FileText className="text-red-500" />
+          <span className="text-sm font-medium">{doc.pdf.name}</span>
+
+          <button
+            type="button"
+            onClick={() => setDoc((prev) => ({ ...prev, pdf: null }))}
+            className="ml-auto bg-white border px-2 py-1 rounded shadow"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};

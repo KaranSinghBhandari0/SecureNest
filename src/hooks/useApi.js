@@ -19,19 +19,19 @@ export const useApi = () => {
     holdLoading = false,
   }) => {
     try {
+      if (!holdLoading) setLoading(true);
 
-      if(!holdLoading) setLoading(true);
+      const options = { method, headers: { ...headers } };
 
-      const options = {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...headers,
-        },
-      };
-
-      // Only attach body if method allows it
-      if (body && method !== "GET") {
+      //  HANDLE FORMDATA UPLOAD
+      if (body instanceof FormData) {
+        options.body = body;
+        delete options.headers["Content-Type"];
+      }
+      
+      //  HANDLE NORMAL JSON BODY
+      else if (body && method !== "GET") {
+        options.headers["Content-Type"] = "application/json";
         options.body = JSON.stringify(body);
       }
 
@@ -51,8 +51,8 @@ export const useApi = () => {
 
       return { ok: true, data };
     } catch (err) {
-      toast.error("Server Error");
       console.error(err);
+      toast.error("Server Error");
       return { ok: false, data: null };
     } finally {
       setLoading(false);
@@ -60,4 +60,4 @@ export const useApi = () => {
   };
 
   return { request, loading };
-}
+};

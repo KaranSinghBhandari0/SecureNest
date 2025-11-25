@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { cookieOptions } from "@/utils/helper";
 import { isWeak } from "@/validations/signupValidation";
 import Notification from "@/models/notificationSchema";
+import Document from "@/models/docModel";
 
 // SIGNUP
 export async function signup(req) {
@@ -150,6 +151,7 @@ export const deleteAccount = async (req) => {
     await logout();
     await User.findByIdAndDelete(userId);
     await Notification.deleteMany({ user: userId });
+    await Document.deleteMany({ user: userId });
 
     return successResponse({ message: "Account deleted successfully" });
   } catch (error) {

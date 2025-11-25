@@ -43,7 +43,7 @@ function Hero() {
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
               <Link
-                href="/"
+                href="/documents"
                 className="rounded-md bg-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 transition-all transform hover:scale-105"
               >
                 Get Started for Free

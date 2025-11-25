@@ -29,13 +29,21 @@ const docSchema = new mongoose.Schema({
   image: {
     type: String,
   },
+  // cloudinary id for image
   cloudinary_id: {
+    type: String,
+  },
+  pdf: {
+    type: String,
+  },
+  // cloudinary id for pdf
+  pdf_cloudinary_id: {
     type: String,
   },
   content: {
     type: String,
   }
-});
+}, { timestamps: true });
 
 const Document = mongoose.models?.Document || mongoose.model("Document", docSchema);
 export default Document;

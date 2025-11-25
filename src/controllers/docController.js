@@ -5,54 +5,116 @@ import { trimObject } from "@/utils/trimObject";
 import { errorResponse, successResponse } from "@/utils/responseHelper";
 import { getCurrentUser } from "./authController";
 import Notification from "@/models/notificationSchema";
+import cloudinary from "@/lib/cloudConfig";
 
 // CREATE DOCUMENT
 export const createDocument = async (req) => {
   try {
     await connectDB();
-    const body = trimObject(await req.json());
-    const { title, type, username, email, password, text } = body;
 
     const user = await getCurrentUser();
-    const userId = user?._id;
-
-    if (!userId) {
+    if (!user?._id) {
       return errorResponse({ message: "Unauthenticated!" });
     }
+
+    const form = await req.formData();
+
+    const title = form.get("title")?.toString().trim();
+    const type = form.get("type")?.toString().trim();
 
     if (!title || !type) {
       return errorResponse({ message: "Title and Type are required" });
     }
 
-    // 🔐 Encrypt sensitive fields
+    const username = form.get("username")?.toString().trim() || "";
+    const email = form.get("email")?.toString().trim() || "";
+    const password = form.get("password")?.toString().trim() || "";
+    const textContent = form.get("text")?.toString() || "";
+    const file = form.get("file");
+
+    // ... (Encryption logic remains the same) ...
     const encryptedPassword = password
       ? CryptoJS.AES.encrypt(password, process.env.SECRET_KEY).toString()
       : "";
 
-    const encryptedContent = text
-      ? CryptoJS.AES.encrypt(text, process.env.SECRET_KEY).toString()
+    const encryptedContent = textContent
+      ? CryptoJS.AES.encrypt(textContent, process.env.SECRET_KEY).toString()
       : "";
+    // ...
 
-    const newDoc = await Document.create({
-      user: userId,
+    let docData = {
+      user: user._id,
       title,
       type,
-      username: username || "",
-      email: email || "",
-      password: encryptedPassword,
-      content: encryptedContent,
-    });
+    };
 
-    Notification.create({
+    if (type === "email-password") {
+      docData.email = email;
+      docData.password = encryptedPassword;
+    }
+
+    if (type === "username-password") {
+      docData.username = username;
+      docData.password = encryptedPassword;
+    }
+
+    if (type === "text") {
+      docData.content = encryptedContent;
+    }
+
+    if (type === "image" || type === "pdf") {
+      if (!file) {
+        return errorResponse({ message: "File is required" });
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const resourceType = type === "image" ? "image" : "raw"; // 'raw' for PDF
+
+      const uploadResult = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            {
+              resource_type: resourceType,
+              folder: "SecureNest",
+              use_filename: true,
+              unique_filename: false,
+              overwrite: true,
+              format: type === "image" ? "" : "pdf",
+            },
+            (err, result) => {
+              if (err) reject(err);
+              else resolve(result);
+            }
+          )
+          .end(buffer);
+      });
+
+      if (type === "image") {
+        docData.image = uploadResult.secure_url;
+        docData.cloudinary_id = uploadResult.public_id;
+      }
+      if (type === "pdf") {
+        docData.pdf = uploadResult.secure_url;
+        docData.pdf_cloudinary_id = uploadResult.public_id;
+      }
+    }
+
+    // SAVE DOCUMENT
+    const newDoc = await Document.create(docData);
+
+    // ... (Notification and success response) ...
+    await Notification.create({
       user: user._id,
       title: "New Document Added",
-      message: `New document ${title} was added successfully`,
+      message: `New document "${title}" added successfully`,
     });
 
-    return successResponse({ message: "Document Created Successfully" });
-
+    return successResponse({
+      message: "Document created successfully",
+      document: newDoc,
+    });
   } catch (error) {
-    console.error("Error creating document:", error);
+    console.error("Create Document Error:", error);
     return errorResponse({
       message: "Failed to create document",
       error: error.message,
@@ -79,12 +141,18 @@ export const getDocuments = async (req) => {
     const decryptedDocs = jsonDocs.map((doc) => {
       try {
         if (doc.password) {
-          const bytes = CryptoJS.AES.decrypt(doc.password, process.env.SECRET_KEY);
+          const bytes = CryptoJS.AES.decrypt(
+            doc.password,
+            process.env.SECRET_KEY
+          );
           doc.password = bytes.toString(CryptoJS.enc.Utf8);
         }
 
         if (doc.content) {
-          const bytes = CryptoJS.AES.decrypt(doc.content, process.env.SECRET_KEY);
+          const bytes = CryptoJS.AES.decrypt(
+            doc.content,
+            process.env.SECRET_KEY
+          );
           doc.content = bytes.toString(CryptoJS.enc.Utf8);
         }
       } catch (err) {
@@ -138,7 +206,10 @@ export const updateDocument = async (req) => {
     });
   } catch (error) {
     console.error("Error updating document:", error);
-    return errorResponse({ message: "Failed to update document", error: error.message });
+    return errorResponse({
+      message: "Failed to update document",
+      error: error.message,
+    });
   }
 };
 
@@ -153,6 +224,7 @@ export const deleteDocument = async (req, params) => {
       return errorResponse({ message: "Document ID is required" });
     }
 
+    // Check user
     const user = await getCurrentUser();
     const userId = user?._id;
 
@@ -160,25 +232,46 @@ export const deleteDocument = async (req, params) => {
       return errorResponse({ message: "Unauthenticated!" });
     }
 
-    const deleted = await Document.findOneAndDelete({
+    // Find document
+    const doc = await Document.findOne({
       _id: id,
       user: userId,
     });
 
-    if (!deleted) {
+    if (!doc) {
       return errorResponse({ message: "Document not found" });
     }
 
-    // Create notification
+    // Delete Cloudinary Document
+    if (doc.type === "image" || doc.type === "pdf") {
+      const cloudId =
+        doc.type === "image" ? doc.cloudinary_id : doc.pdf_cloudinary_id;
+      const resource = doc.type === "image" ? "image" : "raw";
+
+      try {
+        await cloudinary.uploader.destroy(cloudId, {
+          resource_type: resource,
+        });
+      } catch (err) {
+        console.error("Cloudinary delete error:", err);
+        return errorResponse({ message: "Server Error" });
+      }
+    }
+
+    await Document.deleteOne({ _id: id, user: userId });
+
     Notification.create({
       user: userId,
       title: "Document Deleted",
-      message: `Document "${deleted.title || deleted.type}" was deleted successfully.`,
+      message: `Document "${doc.title || doc.type}" was deleted successfully.`,
     });
 
     return successResponse({ message: "Document deleted successfully" });
   } catch (error) {
     console.error("Error deleting document:", error);
-    return errorResponse({ message: "Failed to delete document", error: error.message });
+    return errorResponse({
+      message: "Failed to delete document",
+      error: error.message,
+    });
   }
 };
