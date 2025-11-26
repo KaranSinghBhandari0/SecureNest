@@ -5,7 +5,7 @@ It includes advanced authentication, document protection with encryption, and pa
 
 ## 🌐 Live Demo
 
-<a href='https:/securenest1.vercel.app/'> 
+<a href='https://securenest1.vercel.app/'> 
     <img src='./public/secureNest-demo.png'>
     </img>
 </a>
