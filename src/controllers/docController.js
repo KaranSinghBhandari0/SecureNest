@@ -174,40 +174,182 @@ export const getDocuments = async (req) => {
   }
 };
 
-// UPDATE DOCUMENT
-export const updateDocument = async (req) => {
+// GET DOCUMENT BY ID
+export const getDocumentById = async (docId) => {
   try {
     await connectDB();
-    const body = trimObject(await req.json());
-    const { docId, title, username, email, password, text } = body;
 
-    if (!docId) {
+    const user = await getCurrentUser();
+    const userId = user?._id;
+    if (!userId) {
+      return null;
+    }
+
+    const doc = await Document.findOne({ _id: docId, user: userId });
+    if (!doc) {
+      return null;
+    }
+
+    // 🔓 Decrypt fields
+    try {
+      if (doc.password) {
+        const bytes = CryptoJS.AES.decrypt(
+          doc.password,
+          process.env.SECRET_KEY
+        );
+        doc.password = bytes.toString(CryptoJS.enc.Utf8);
+      }
+
+      if (doc.content) {
+        const bytes = CryptoJS.AES.decrypt(doc.content, process.env.SECRET_KEY);
+        doc.content = bytes.toString(CryptoJS.enc.Utf8);
+      }
+    } catch (err) {
+      console.error("Decryption failed:", err);
+      doc.password = "";
+      doc.content = "";
+    }
+
+    return JSON.parse(JSON.stringify(doc));
+  } catch (error) {
+    console.error("Error fetching document:", error);
+    return null;
+  }
+};
+
+// EDIT DOCUMENT
+export const editDocument = async (req, params) => {
+  try {
+    await connectDB();
+
+    const { id } = await params;
+    if (!id) {
       return errorResponse({ message: "Document ID is required" });
     }
 
-    const updated = await Document.findByIdAndUpdate(
-      docId,
-      {
-        username,
-        email,
-        password,
-        content: text,
-      },
-      { new: true }
-    );
+    const user = await getCurrentUser();
+    if (!user?._id) {
+      return errorResponse({ message: "Unauthenticated!" });
+    }
 
-    if (!updated) {
+    const doc = await Document.findOne({ _id: id, user: user._id });
+    if (!doc) {
       return errorResponse({ message: "Document not found" });
     }
 
+    const form = await req.formData();
+
+    const title = form.get("title")?.toString().trim() || doc.title;
+    const type = form.get("type")?.toString().trim() || doc.type;
+
+    let updatedData = { title, type };
+
+    if (type === "email-password") {
+      const email = form.get("email")?.toString().trim() || doc.email;
+      const password = form.get("password")?.toString().trim();
+      // ENCRYPT NEW PASSWORD
+      let encryptedPassword = doc.password;
+      encryptedPassword = CryptoJS.AES.encrypt(
+        password,
+        process.env.SECRET_KEY
+      ).toString();
+      updatedData.email = email;
+      updatedData.password = encryptedPassword;
+    }
+
+    if (type === "username-password") {
+      const username = form.get("username")?.toString().trim() || doc.username;
+      const password = form.get("password")?.toString().trim();
+      // ENCRYPT NEW PASSWORD
+      let encryptedPassword = doc.password;
+      encryptedPassword = CryptoJS.AES.encrypt(
+        password,
+        process.env.SECRET_KEY
+      ).toString();
+      updatedData.username = username;
+      updatedData.password = encryptedPassword;
+    }
+
+    if (type === "text") {
+      const textContent = form.get("text")?.toString();
+      let encryptedContent = doc.content;
+      encryptedContent = CryptoJS.AES.encrypt(
+        textContent,
+        process.env.SECRET_KEY
+      ).toString();
+      updatedData.content = encryptedContent;
+    }
+
+    const file = form.get("file");
+
+    // HANDLE IMAGE OR PDF
+    if ((type === "image" || type === "pdf") && file) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const resourceType = type === "image" ? "image" : "raw";
+
+      // DELETE OLD MEDIA FROM CLOUDINARY
+      if (type === "image" && doc.cloudinary_id) {
+        await cloudinary.uploader.destroy(doc.cloudinary_id, {
+          resource_type: "image",
+        });
+      }
+
+      if (type === "pdf" && doc.pdf_cloudinary_id) {
+        await cloudinary.uploader.destroy(doc.pdf_cloudinary_id, {
+          resource_type: "raw",
+        });
+      }
+
+      // UPLOAD NEW FILE
+      const uploadResult = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            {
+              resource_type: resourceType,
+              folder: "SecureNest",
+              use_filename: true,
+              unique_filename: false,
+              overwrite: true,
+              format: type === "image" ? "" : "pdf",
+            },
+            (err, result) => {
+              if (err) reject(err);
+              else resolve(result);
+            }
+          )
+          .end(buffer);
+      });
+
+      if (type === "image") {
+        updatedData.image = uploadResult.secure_url;
+        updatedData.cloudinary_id = uploadResult.public_id;
+      }
+
+      if (type === "pdf") {
+        updatedData.pdf = uploadResult.secure_url;
+        updatedData.pdf_cloudinary_id = uploadResult.public_id;
+      }
+    }
+
+    const updatedDoc = await Document.findByIdAndUpdate(id, updatedData, {
+      new: true,
+    });
+
+    // NOTIFICATION
+    await Notification.create({
+      user: user._id,
+      title: "Document Updated",
+      message: `Your document "${title}" was updated successfully`,
+    });
+
     return successResponse({
       message: "Document updated successfully",
-      document: updated,
+      document: updatedDoc,
     });
   } catch (error) {
-    console.error("Error updating document:", error);
+    console.error("Edit Document Error:", error);
     return errorResponse({
-      message: "Failed to update document",
+      message: "Failed to edit document",
       error: error.message,
     });
   }

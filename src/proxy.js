@@ -17,8 +17,8 @@ const authPages = [
   "/forgot-password",
 ];
 
-// Middleware function
-export async function middleware(req) {
+// proxy function
+export async function proxy(req) {
   const token = req.cookies.get("auth-token")?.value;
   const { pathname } = req.nextUrl;
 

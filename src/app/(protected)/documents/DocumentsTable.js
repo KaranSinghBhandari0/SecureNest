@@ -1,25 +1,28 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useApi } from "@/hooks/useApi";
 import { FaTrash } from "react-icons/fa";
 import { Edit, Eye, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import React, { useState, useRef } from "react";
+import { EllipsisVertical } from "lucide-react";
 import useOutsideClick from "@/hooks/useOutsideClick";
 import AlertBox from "@/components/common/AlertBox";
-import Image from "next/image";
+import Dropdown from "@/components/common/Dropdown";
 
 export default function DocumentsTable({ documents }) {
-  const [selectedDoc, setSelectedDoc] = useState(null);
-  const [deleteId, setDeleteId] = useState(null);
-
   const popupRef = useRef(null);
+  const [deleteId, setDeleteId] = useState(null);
+  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [showAlertBox, setShowAlertBox] = useState(false);
 
+  const router = useRouter();
   const { request, loading } = useApi();
-
   useOutsideClick(popupRef, () => setSelectedDoc(null), !!selectedDoc);
 
+  // DELETE DOCUMENT API CALL
   const deleteDocument = async (id) => {
     await request({
       url: `/api/document/${id}`,
@@ -29,8 +32,146 @@ export default function DocumentsTable({ documents }) {
     });
   };
 
-  const handleEdit = (id) => alert(`Navigating to edit document ${id}`);
+  // EDIT DOCUMENT REDIRECT
+  const handleEdit = (id) => {
+    router.push(`/documents/${id}/edit`);
+  };
 
+  return (
+    <div className="w-full min-h-[calc(100vh-56px)] bg-gray-50 p-4">
+      <AlertBox
+        visible={showAlertBox}
+        title="Delete Document"
+        text="Are you sure you want to delete this document? This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Revert"
+        confirmColor="red"
+        loading={loading}
+        onConfirm={async () => {
+          await deleteDocument(deleteId);
+          setShowAlertBox(false);
+        }}
+        onCancel={() => setShowAlertBox(false)}
+      />
+
+      <div className="max-w-5xl mx-auto">
+        <HeaderSection count={documents?.length} />
+
+        <DocumentsTableView
+          documents={documents}
+          loading={loading}
+          setSelectedDoc={setSelectedDoc}
+          handleDelete={(id) => {
+            setDeleteId(id);
+            setShowAlertBox(true);
+          }}
+          handleEdit={handleEdit}
+        />
+
+        <DocumentPopup
+          selectedDoc={selectedDoc}
+          closePopup={() => setSelectedDoc(null)}
+          popupRef={popupRef}
+          handleEdit={handleEdit}
+          loading={loading}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------- HEADER ----------
+function HeaderSection({ count }) {
+  return (
+    <div className="flex justify-between items-center mb-6">
+      <h1 className="text-2xl font-bold text-gray-900">
+        My Documents
+        <span className="ml-2 text-gray-500 text-sm">({count})</span>
+      </h1>
+
+      <Link
+        href="/documents/create"
+        className="px-4 py-2 bg-green-600 text-white text-center rounded-lg hover:bg-green-700 text-sm font-medium shadow-sm"
+      >
+        Add New Document
+      </Link>
+    </div>
+  );
+}
+
+// ---------- TABLE ----------
+function DocumentsTableView({
+  documents,
+  setSelectedDoc,
+  handleEdit,
+  handleDelete,
+}) {
+  return (
+    <div className="overflow-hidden bg-white rounded-xl shadow border border-gray-200">
+      <table className="table w-full text-left">
+        <thead className="bg-blue-600 text-white">
+          <tr>
+            <th className="p-3">Title</th>
+            <th className="p-3 hidden md:block">Type</th>
+            <th className="p-3 text-center">Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {documents.map((doc) => (
+            <tr
+              key={doc._id}
+              className="border-b border-gray-200 hover:bg-gray-100 text-sm"
+            >
+              <td className="p-3">{doc.title}</td>
+              <td className="hidden md:block capitalize p-3 text-gray-700">
+                {doc.type}
+              </td>
+
+              <td className="p-3 text-center">
+                <div className="flex justify-center gap-3">
+                  <Dropdown
+                    icon={<EllipsisVertical size={18} />}
+                    options={[
+                      {
+                        label: "View",
+                        icon: <Eye size={16} />,
+                        action: () => setSelectedDoc(doc),
+                      },
+                      {
+                        label: "Edit",
+                        icon: <Edit size={16} className="text-orange-500" />,
+                        action: () => handleEdit(doc._id),
+                      },
+                      {
+                        label: "Delete",
+                        icon: <FaTrash size={16} className="text-red-500" />,
+                        action: () => handleDelete(doc._id),
+                      },
+                    ]}
+                    onSelect={(item) => item.action && item.action()}
+                  />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ---------- POPUP MODAL ----------
+function DocumentPopup({
+  selectedDoc,
+  closePopup,
+  popupRef,
+  handleEdit,
+  loading,
+}) {
+  if (!selectedDoc) return null;
+
+  // RENDER DOCUMENT CONTENT BASED ON TYPE
   const renderDocumentContent = (doc) => {
     switch (doc.type) {
       case "email-password":
@@ -48,7 +189,9 @@ export default function DocumentsTable({ documents }) {
 
             <div className="grid grid-cols-2 gap-2">
               <strong className="text-gray-600">Password:</strong>
-              <span className="text-gray-800 font-medium break-all">{doc.password}</span>
+              <span className="text-gray-800 font-medium break-all">
+                {doc.password}
+              </span>
             </div>
           </div>
         );
@@ -89,175 +232,6 @@ export default function DocumentsTable({ documents }) {
     }
   };
 
-  const [showAlertBox, setShowAlertBox] = useState(false);
-
-  return (
-    <div className="w-full min-h-[calc(100vh-56px)] bg-gray-50 p-4">
-
-      <AlertBox
-        visible={showAlertBox}
-        title="Delete Document"
-        text="Are you sure you want to delete this document? This action cannot be undone."
-        confirmLabel="Delete"
-        cancelLabel="Revert"
-        confirmColor="red"
-        loading={loading}
-        onConfirm={async () => {
-          await deleteDocument(deleteId);
-          setShowAlertBox(false);
-        }}
-        onCancel={() => setShowAlertBox(false)}
-      />
-
-      <div className="max-w-5xl mx-auto">
-
-        <HeaderSection documents={documents} />
-
-        <DocumentsTableView
-          documents={documents}
-          loading={loading}
-          setSelectedDoc={setSelectedDoc}
-          handleDelete={(id) => {
-            setDeleteId(id);
-            setShowAlertBox(true);
-          }}
-          handleEdit={handleEdit}
-        />
-
-        <DocumentPopup
-          selectedDoc={selectedDoc}
-          closePopup={() => setSelectedDoc(null)}
-          popupRef={popupRef}
-          renderDocumentContent={renderDocumentContent}
-          handleEdit={handleEdit}
-          loading={loading}
-        />
-      </div>
-    </div>
-  );
-}
-
-
-// ---------- HEADER ---------- 
-function HeaderSection({ documents }) {
-  return (
-    <div className="flex justify-between items-center mb-6">
-      <h1 className="text-2xl font-bold text-gray-900">
-        My Documents
-        <span className="ml-2 text-gray-500 text-sm">
-          ({documents.length})
-        </span>
-      </h1>
-
-      <Link
-        href="/documents/create"
-        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium shadow-sm"
-      >
-        Add New Document
-      </Link>
-    </div>
-  );
-}
-
-
-// ---------- TABLE + MOBILE CARDS ----------
-function DocumentsTableView({
-  documents,
-  loading,
-  setSelectedDoc,
-  handleEdit,
-  handleDelete,
-}) {
-  return (
-    <div className="overflow-hidden bg-white rounded-xl shadow border border-gray-200">
-      {/* DESKTOP TABLE */}
-      <table className="hidden md:table w-full text-left">
-        <thead className="bg-blue-600 text-white">
-          <tr>
-            <th className="p-3">Title</th>
-            <th className="p-3">Type</th>
-            <th className="p-3 text-center">Action</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {documents.map((doc) => (
-            <tr key={doc._id} className="border-b border-gray-200 hover:bg-gray-100 text-sm">
-              <td className="p-3">{doc.title}</td>
-              <td className="capitalize p-3 text-gray-700">{doc.type}</td>
-
-              <td className="p-3 text-center">
-                <div className="flex justify-center gap-3">
-                  <button
-                    onClick={() => setSelectedDoc(doc)}
-                    className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 flex items-center gap-2"
-                  >
-                    <Eye size={16} /> View
-                  </button>
-
-                  <button
-                    onClick={() => handleEdit(doc._id)}
-                    className="px-3 py-1 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 flex items-center gap-2"
-                    disabled={loading}
-                  >
-                    <Edit size={16} /> Edit
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(doc._id)}
-                    className="px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 flex items-center gap-2"
-                    disabled={loading}
-                  >
-                    <FaTrash size={16} /> Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* MOBILE CARDS */}
-      <div className="md:hidden space-y-3 p-3">
-        {documents.map((doc) => (
-          <div key={doc._id} className="border border-gray-200 rounded-xl p-4 shadow-sm bg-white">
-            <p className="font-semibold text-gray-900">{doc.title}</p>
-            <p className="text-gray-600 capitalize text-sm">Type: {doc.type}</p>
-
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={() => setSelectedDoc(doc)}
-                className="flex-1 px-3 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2"
-              >
-                <Eye size={16} /> View
-              </button>
-
-              <button
-                onClick={() => handleEdit(doc._id)}
-                className="flex-1 px-3 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 flex items-center justify-center gap-2"
-              >
-                <Edit size={16} /> Edit
-              </button>
-
-              <button
-                onClick={() => handleDelete(doc._id)}
-                className="flex-1 px-3 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 flex items-center justify-center gap-2"
-              >
-                <FaTrash size={16} /> Delete
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-
-// ---------- POPUP MODAL ----------
-function DocumentPopup({ selectedDoc, closePopup, popupRef, renderDocumentContent, handleEdit, loading }) {
-  if (!selectedDoc) return null;
-
   return (
     <div className="fixed inset-0 bg-gray-900/60 flex justify-center items-center p-4 sm:p-8 z-50 backdrop-blur-sm">
       <div
@@ -265,7 +239,9 @@ function DocumentPopup({ selectedDoc, closePopup, popupRef, renderDocumentConten
         className="bg-white w-full max-w-2xl rounded-xl shadow-2xl relative transition-all duration-300 transform scale-100 border border-gray-200"
       >
         <div className="flex justify-between items-center p-5 border-b border-gray-100">
-          <h2 className="text-2xl font-bold text-gray-900 truncate">{selectedDoc.title}</h2>
+          <h2 className="text-2xl font-bold text-gray-900 truncate">
+            {selectedDoc.title}
+          </h2>
 
           <button
             onClick={closePopup}

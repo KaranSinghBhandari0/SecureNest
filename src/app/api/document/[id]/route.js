@@ -1,7 +1,7 @@
-import { deleteDocument, updateDocument } from "@/controllers/docController";
+import { deleteDocument, editDocument } from "@/controllers/docController";
 
 export const PUT = async (req, { params }) => {
-  return await updateDocument(req, { params });
+  return await editDocument(req, params);
 }
 
 export async function DELETE(req, { params }) {
