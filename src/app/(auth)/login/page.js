@@ -29,7 +29,7 @@ export default function Login() {
   };
 
   const handleGoogleLogin = () => {
-    alert("Google login clicked");
+    window.location.href = "/api/auth/google";
   };
 
   return (

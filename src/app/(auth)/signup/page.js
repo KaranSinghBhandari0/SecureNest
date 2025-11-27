@@ -34,7 +34,7 @@ export default function Signup() {
   };
 
   const handleGoogleSignup = () => {
-    alert("Google signup clicked");
+    window.location.href = "/api/auth/google";
   };
 
   return (
