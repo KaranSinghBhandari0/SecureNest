@@ -1,4 +1,3 @@
-export const dynamic = "force-dynamic";
 import DocumentsTable from "./DocumentsTable";
 import { getDocuments } from "@/controllers/docController";
 

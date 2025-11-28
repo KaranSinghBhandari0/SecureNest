@@ -1,4 +1,3 @@
-export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/controllers/authController";
 import ProfileForm from "./ProfileForm";
 

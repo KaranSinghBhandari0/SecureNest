@@ -1,4 +1,3 @@
-export const dynamic = "force-dynamic";
 import Header from "./@components/Header";
 import { getCurrentUser } from "@/controllers/authController";
 import { getNotifications } from "@/controllers/notificationController";
